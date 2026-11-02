@@ -1,0 +1,420 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CvPageSize {
+  A4
+  LETTER
+}
+
+model Admin {
+  id                    String          @id @default(cuid()) @db.VarChar(36)
+  name                  String          @db.VarChar(120)
+  email                 String          @unique @db.VarChar(254)
+  phone                 String?         @unique @db.VarChar(32)
+  passwordHash          String          @db.VarChar(255)
+  isActive              Boolean         @default(true)
+  failedLoginAttempts   Int             @default(0)
+  lockedUntil           DateTime?
+  lastLoginAt           DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  refreshTokens         RefreshToken[]
+  authSettings          AuthSettings?
+
+  @@index([isActive])
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid()) @db.VarChar(36)
+  adminId    String    @db.VarChar(36)
+  tokenHash  String    @unique @db.VarChar(255)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  userAgent  String?   @db.VarChar(512)
+  ipAddress  String?   @db.VarChar(45)
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, expiresAt])
+  @@index([revokedAt])
+}
+
+model SecurityQuestion {
+  id          String         @id @default(cuid()) @db.VarChar(36)
+  question    String         @unique @db.VarChar(255)
+  isActive    Boolean        @default(true)
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  authSettings AuthSettings[]
+
+  @@index([isActive, sortOrder])
+}
+
+model AuthSettings {
+  id                         String            @id @default("singleton") @db.VarChar(36)
+  adminId                    String            @unique @db.VarChar(36)
+  selectedSecurityQuestionId String?           @db.VarChar(36)
+  securityAnswerHash         String?           @db.VarChar(255)
+  loginEnabled               Boolean           @default(true)
+  requireSecurityQuestion    Boolean           @default(false)
+  maxFailedLoginAttempts     Int               @default(5)
+  lockoutDurationMinutes     Int               @default(15)
+  sessionDurationMinutes     Int               @default(10080)
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  admin                      Admin             @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  selectedSecurityQuestion   SecurityQuestion? @relation(fields: [selectedSecurityQuestionId], references: [id], onDelete: SetNull)
+}
+
+model Profile {
+  id                  String        @id @default("singleton") @db.VarChar(36)
+  fullName            String        @db.VarChar(160)
+  professionalTitle   String        @db.VarChar(200)
+  biography           String?       @db.LongText
+  location            String?       @db.VarChar(255)
+  email               String?       @db.VarChar(254)
+  phone               String?       @db.VarChar(32)
+  profileImageUrl     String?       @db.VarChar(2048)
+  cvIntroduction      String?       @db.LongText
+  socialLinks         Json?
+  availabilityStatus  String?       @db.VarChar(64)
+  status              ContentStatus @default(DRAFT)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([status])
+}
+
+model Experience {
+  id              String          @id @default(cuid()) @db.VarChar(36)
+  company         String          @db.VarChar(200)
+  position        String          @db.VarChar(200)
+  location        String?         @db.VarChar(255)
+  startDate       DateTime
+  endDate         DateTime?
+  isCurrent       Boolean         @default(false)
+  description     String?         @db.LongText
+  responsibilities Json?
+  achievements   Json?
+  displayOrder    Int             @default(0)
+  status          ContentStatus  @default(DRAFT)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  cvProfiles      CVExperience[]
+
+  @@index([status, displayOrder])
+  @@index([startDate, endDate])
+}
+
+model SkillCategory {
+  id            String   @id @default(cuid()) @db.VarChar(36)
+  name          String   @unique @db.VarChar(100)
+  slug          String   @unique @db.VarChar(120)
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  skills        Skill[]
+
+  @@index([displayOrder])
+}
+
+model Skill {
+  id                String        @id @default(cuid()) @db.VarChar(36)
+  categoryId        String        @db.VarChar(36)
+  name              String        @db.VarChar(120)
+  slug              String        @unique @db.VarChar(140)
+  iconIdentifier    String?       @db.VarChar(120)
+  iconSource        String?       @db.VarChar(2048)
+  proficiencyLevel  Int?
+  displayOrder      Int           @default(0)
+  animationEnabled  Boolean       @default(false)
+  animationStyle    String?       @db.VarChar(80)
+  status            ContentStatus @default(DRAFT)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  category          SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  cvProfiles        CVSkill[]
+
+  @@index([categoryId, displayOrder])
+  @@index([status, displayOrder])
+}
+
+model Project {
+  id                String             @id @default(cuid()) @db.VarChar(36)
+  title             String             @db.VarChar(200)
+  slug              String             @unique @db.VarChar(220)
+  shortDescription  String?            @db.VarChar(500)
+  description       String?            @db.LongText
+  thumbnailUrl      String?            @db.VarChar(2048)
+  galleryImages     Json?
+  githubUrl         String?            @db.VarChar(2048)
+  liveDemoUrl       String?            @db.VarChar(2048)
+  isFeatured        Boolean            @default(false)
+  displayOrder      Int                @default(0)
+  status            ContentStatus      @default(DRAFT)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  technologies      ProjectTechnology[]
+  cvProfiles        CVProject[]
+
+  @@index([status, displayOrder])
+  @@index([isFeatured, status])
+}
+
+model ProjectTechnology {
+  id         String   @id @default(cuid()) @db.VarChar(36)
+  projectId  String   @db.VarChar(36)
+  name       String   @db.VarChar(120)
+  sortOrder  Int      @default(0)
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId, sortOrder])
+}
+
+model Education {
+  id             String          @id @default(cuid()) @db.VarChar(36)
+  institution    String          @db.VarChar(200)
+  qualification  String          @db.VarChar(200)
+  fieldOfStudy   String?         @db.VarChar(200)
+  startDate      DateTime?
+  endDate        DateTime?
+  description    String?         @db.LongText
+  displayOrder   Int             @default(0)
+  status         ContentStatus   @default(DRAFT)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  cvProfiles     CVEducation[]
+
+  @@index([status, displayOrder])
+}
+
+model Certification {
+  id                   String             @id @default(cuid()) @db.VarChar(36)
+  name                 String             @db.VarChar(200)
+  issuingOrganization  String             @db.VarChar(200)
+  issueDate            DateTime?
+  expiryDate           DateTime?
+  credentialId         String?            @db.VarChar(200)
+  credentialUrl        String?            @db.VarChar(2048)
+  certificateImageUrl  String?            @db.VarChar(2048)
+  displayOrder         Int                @default(0)
+  status               ContentStatus      @default(DRAFT)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  cvProfiles           CVCertification[]
+
+  @@index([status, displayOrder])
+  @@index([issueDate])
+}
+
+model Interest {
+  id            String        @id @default(cuid()) @db.VarChar(36)
+  name          String        @unique @db.VarChar(120)
+  description   String?       @db.Text
+  icon          String?       @db.VarChar(120)
+  displayOrder  Int           @default(0)
+  status        ContentStatus @default(DRAFT)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([status, displayOrder])
+}
+
+model Reference {
+  id           String         @id @default(cuid()) @db.VarChar(36)
+  fullName     String         @db.VarChar(160)
+  position     String?        @db.VarChar(200)
+  organization String?        @db.VarChar(200)
+  email        String?        @db.VarChar(254)
+  phone        String?        @db.VarChar(32)
+  relationship String?        @db.VarChar(120)
+  displayOrder Int            @default(0)
+  includeInCv  Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  cvProfiles   CVReference[]
+
+  @@index([displayOrder])
+}
+
+model CVProfile {
+  id              String             @id @default(cuid()) @db.VarChar(36)
+  name            String             @db.VarChar(160)
+  slug            String             @unique @db.VarChar(180)
+  description     String?            @db.Text
+  template        String             @default("classic") @db.VarChar(80)
+  isDefault       Boolean            @default(false)
+  isPublished     Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  experiences     CVExperience[]
+  skills          CVSkill[]
+  projects        CVProject[]
+  education       CVEducation[]
+  certifications  CVCertification[]
+  references      CVReference[]
+  sections        CVSection[]
+  settings        CVSettings?
+
+  @@index([isPublished])
+  @@index([isDefault])
+}
+
+model CVExperience {
+  cvProfileId  String      @db.VarChar(36)
+  experienceId String      @db.VarChar(36)
+  displayOrder Int         @default(0)
+  cvProfile    CVProfile   @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  experience   Experience  @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+
+  @@id([cvProfileId, experienceId])
+  @@index([experienceId])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVSkill {
+  cvProfileId  String    @db.VarChar(36)
+  skillId      String    @db.VarChar(36)
+  displayOrder Int       @default(0)
+  cvProfile    CVProfile @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  skill        Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([cvProfileId, skillId])
+  @@index([skillId])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVProject {
+  cvProfileId  String    @db.VarChar(36)
+  projectId    String    @db.VarChar(36)
+  displayOrder Int       @default(0)
+  cvProfile    CVProfile @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([cvProfileId, projectId])
+  @@index([projectId])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVEducation {
+  cvProfileId  String    @db.VarChar(36)
+  educationId  String    @db.VarChar(36)
+  displayOrder Int       @default(0)
+  cvProfile    CVProfile @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  education    Education @relation(fields: [educationId], references: [id], onDelete: Cascade)
+
+  @@id([cvProfileId, educationId])
+  @@index([educationId])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVCertification {
+  cvProfileId     String        @db.VarChar(36)
+  certificationId String        @db.VarChar(36)
+  displayOrder    Int           @default(0)
+  cvProfile       CVProfile     @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  certification   Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+
+  @@id([cvProfileId, certificationId])
+  @@index([certificationId])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVReference {
+  cvProfileId  String    @db.VarChar(36)
+  referenceId  String    @db.VarChar(36)
+  displayOrder Int       @default(0)
+  cvProfile    CVProfile @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+  reference    Reference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@id([cvProfileId, referenceId])
+  @@index([referenceId])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVSection {
+  id           String    @id @default(cuid()) @db.VarChar(36)
+  cvProfileId  String    @db.VarChar(36)
+  sectionKey   String    @db.VarChar(80)
+  isEnabled    Boolean   @default(true)
+  displayOrder Int       @default(0)
+  cvProfile    CVProfile @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([cvProfileId, sectionKey])
+  @@index([cvProfileId, displayOrder])
+}
+
+model CVSettings {
+  id                       String      @id @default(cuid()) @db.VarChar(36)
+  cvProfileId              String      @unique @db.VarChar(36)
+  fontFamily               String      @default("Inter") @db.VarChar(100)
+  fontSize                 Int         @default(11)
+  accentColor              String      @default("#1f2937") @db.Char(7)
+  pageSize                 CvPageSize  @default(A4)
+  marginTopMm              Int         @default(16)
+  marginRightMm            Int         @default(16)
+  marginBottomMm           Int         @default(16)
+  marginLeftMm             Int         @default(16)
+  showReferences           Boolean     @default(false)
+  showContactInformation   Boolean     @default(true)
+  showProfileImage         Boolean     @default(false)
+  dateFormat               String      @default("MMM yyyy") @db.VarChar(40)
+  displayPreferences       Json?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+  cvProfile                CVProfile   @relation(fields: [cvProfileId], references: [id], onDelete: Cascade)
+}
+
+model PortfolioSettings {
+  id                   String   @id @default("singleton") @db.VarChar(36)
+  theme                String   @default("system") @db.VarChar(40)
+  accentColor          String   @default("#1f2937") @db.Char(7)
+  isPublic             Boolean  @default(false)
+  showContactSection   Boolean  @default(true)
+  socialLinks          Json?
+  sectionOrder         Json?
+  seoTitle             String?  @db.VarChar(200)
+  seoDescription       String?  @db.VarChar(500)
+  animationSettings    Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ContactMessage {
+  id          String   @id @default(cuid()) @db.VarChar(36)
+  senderName  String   @db.VarChar(160)
+  senderEmail String   @db.VarChar(254)
+  subject     String   @db.VarChar(200)
+  message     String   @db.LongText
+  isRead      Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isArchived, isRead, createdAt])
+  @@index([createdAt])
+}
+
+model RateLimitBucket {
+  id            String   @id @db.Char(64)
+  windowStartedAt DateTime
+  requestCount  Int      @default(0)
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([expiresAt])
+}
